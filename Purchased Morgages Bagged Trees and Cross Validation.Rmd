@@ -1,0 +1,92 @@
+---
+title: "Bagged Trees"
+author: "Sean F. Larsen"
+date: "April 1, 2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(rpart)
+library(rpart.plot)
+library(Metrics)
+library(ipred)
+```
+## Should This Loan be Approved or Denied?
+The Small Business Administration (SBA) was founded in 1953 to assist small businesses in obtaining loans. Small businesses have been the primary source of employment in the United States.  Helping small businesses help with job creation, which reduces unemployment.  Small business growth also promotes economic growth.  One of the ways the SBA helps small businesses is by guaranteeing bank loans. This guarantee reduces the risk to banks and encourages them to lend to small businesses.  If the loan defaults, the SBA covers the amount guaranteed, and the bank suffers a loss for the remaining balance.
+
+There have been several small business success stories like FedEx and Apple.  However, the rate of default is very high.  Many economists believe the banking market works better without the assistance of the SBA.  Supporter claim that the social benefits and job creation outweigh any financial costs to the government in defaulted loans.
+
+## The Data Set
+The original data set is from the U.S.SBA loan database, which includes historical data from 1987 through 2014 (899,164 observations) with 27 variables. The data set includes information on whether the loan was paid off in full or if the SMA had to charge off any amount and how much that amount was.  The data set used is a subset of the original set. It contains loans about the Real Estate and Rental and Leasing industry in California. This file has 2,102 observations and 35 variables. The column Default is an integer of 1 or zero, and I had to change this column to a factor.
+
+For more information on this data set go to []https://amstat.tandfonline.com/doi/full/10.1080/10691898.2018.1434342
+
+## Decision Trees
+In this exercise, I use the database to train a decision tree to determine if the SBA should guarantee a loan.  Decision trees are simple to set-up, and the model creates features automatically.
+
+## Bagged Trees
+One of the drawbacks of Decision Trees is their hi variance. A small change in the data can result in a different series of slips. Bagging takes a group of trees and averages them together to reduce the variance. It can also help avoid overfitting. This method is also called Bagged Trees. Combining several models into one is called an ensemble model, and averaging is one of the techniques used when you create an ensemble model. Though bagging can be applied to decision trees, it can be applied to any type of model.
+
+## R Package
+I used the ipred package, which stands for Improved Predictors. This package is for improved predictive models by indirect classification and bagging for classification, regression and survival problems as well as resampling based estimators of prediction error.
+
+## Bagging
+Bagging is short for **B**ootstrap **AG**reagating.  Bagging uses Bootstrap sampling and then aggregates the sample together by averaging. Bootstrapping means to select rows from the training data set randomly with replacement.  So in the various samples, rows could be used multiple times or not at all.
+
+## Performing Bagging
+To start bagging, several random samples were selected from the training set and grouped.  Next, train various models using each sample group.  This can be done multiple times.  The more the trees you have, the better the model. Then you generate a prediction with all the models that were trained and average the predictions together yo get a final aggregated prediction. The ipred package in R is loaded to perform bagging.
+
+## SBA Loan Model
+Taking the SBA loan data set, I trained a bagged tree model, generated a prediction, and evaluated the model.
+The code created an 80/20 split for the training set and the test set from the original data.  The data was in a CSV file, which was read into a dataframe. Then I bagged the trees. The column Default is an integer of 1 or zero, and I had to change this column to a factor.
+
+```{r echo=FALSE}
+# Reading the CSV file then converting the data to a data frame
+sba_loans <- read.csv("SBAcase.11.13.17.csv")
+sba_loans_df <- data.frame(sba_loans)
+
+sba_loans_df$Default <- as.factor(sba_loans_df$Default)
+
+# The Split
+n <- nrow(sba_loans_df)
+n_train <- round(.80 * n)
+
+# Bagging is a randomized model, so let's set a seed (123) for reproducibility
+set.seed(123)
+
+# Create a vector of indicise which is an 80% random sample
+train_indicise <- sample(1:n, n_train)
+
+# subset the data frame into the training set
+sba_train <- sba_loans_df[train_indicise, ]
+
+# Exclude the training indicise to create the test set
+sba_test <- sba_loans_df[-train_indicise, ]
+
+# Bagging
+sba_loan_model <- bagging(formula = Default~., data = sba_train, coob = TRUE)
+
+print(sba_loan_model)
+```
+## Making a Prediction
+Once I had the bagged tree model, I used the Predict function on the test set to create a prediction.  I did this in the same way as it is with a single tree.  Once I executed the prediction, I evaluated the mode by printing a confusion matrix.
+The Receiver-Operating Characteristic Curve (ROC Curve) is an excellent method for evaluated models for classification based on their performance concerning the false positive and true positive rates. The  Area Under the Curve (AUC) determines the model's overall performance.
+
+## Classification
+The AUC is a number between 0 and 1, and the ideal ROC curve would have a true positive rate of 1 and a false positive rate of 0. The larger the AUC, the better the classifier is. A model with an AUC of 1 correctly classifies every observation.  An AUC of 0.5 is no better than random chance, and an AUC of 0, classified every observation incorrectly.
+
+As part of this exercise, I also calculated the AUC using the matrix package and the AUC function.
+
+``` {R echo = FALSE}
+
+# Made the Prediction Model and gererated a prediction, type = prob for the auc calculation 
+sba_loan_predict <- predict(object = sba_loan_model, newdata = sba_test, type = "prob")
+
+# sba_laon_prediction is a matrix
+class(sba_loan_predict)
+
+# Compute the AUC (`actual` must be a binary (or 1/0 numeric) vector)
+auc(actual = ifelse(sba_test$Default == "1", 1, 0), 
+                    predicted = sba_loan_predict[,"1"])
+```
